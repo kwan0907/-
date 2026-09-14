@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-if(window.__SMARTBET_MOBILE_V8__)return;window.__SMARTBET_MOBILE_V8__='20260915-mobile1';
+if(window.__SMARTBET_MOBILE_V8__)return;window.__SMARTBET_MOBILE_V8__='20260915-mobile2';
 var d=document,nativeFetch=window.fetch.bind(window),pending=[];
 function q(s){return d.querySelector(s)}
 function viewportMeta(){var m=q('meta[name="viewport"]');if(m)m.setAttribute('content','width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover')}
@@ -9,11 +9,12 @@ function addStyle(){var css='\
 function viewOn(id){var x=d.getElementById(id);return !!(x&&x.classList.contains('on'))}
 function targetFor(url){url=String(url||'');if(url.indexOf('smartbet-backtest-v2')>=0||url.indexOf('smartbet-replay-pro')>=0)return['replay'];if(url.indexOf('smartbet-model-lab')>=0)return['research'];if(url.indexOf('smartbet-research-feed')>=0)return['research','health'];return null}
 function shouldRelease(views){for(var i=0;i<views.length;i++)if(viewOn(views[i]))return true;return false}
-function flush(){var keep=[];for(var i=0;i<pending.length;i++){var p=pending[i];if(shouldRelease(p.views)||p.forced){nativeFetch(p.input,p.init).then(p.resolve,p.reject)}else keep.push(p)}pending=keep}
-window.fetch=function(input,init){var url='';try{url=typeof input==='string'?input:(input&&input.url)||String(input)}catch(e){url=String(input)}var views=targetFor(url);if(!views||shouldRelease(views))return nativeFetch(input,init);return new Promise(function(resolve,reject){pending.push({input:input,init:init,views:views,resolve:resolve,reject:reject,created:Date.now()})})}
+function finishPending(p){nativeFetch(p.input,p.init).then(function(resp){for(var i=0;i<p.waiters.length;i++){var r=i===p.waiters.length-1?resp:resp.clone();p.waiters[i].resolve(r)}},function(err){for(var j=0;j<p.waiters.length;j++)p.waiters[j].reject(err)})}
+function flush(){var keep=[];for(var i=0;i<pending.length;i++){var p=pending[i];if(shouldRelease(p.views))finishPending(p);else keep.push(p)}pending=keep}
+window.fetch=function(input,init){var url='';try{url=typeof input==='string'?input:(input&&input.url)||String(input)}catch(e){url=String(input)}var views=targetFor(url);if(!views||shouldRelease(views))return nativeFetch(input,init);return new Promise(function(resolve,reject){for(var i=0;i<pending.length;i++){if(pending[i].url===url){pending[i].waiters.push({resolve:resolve,reject:reject});return}}pending.push({url:url,input:input,init:init,views:views,waiters:[{resolve:resolve,reject:reject}],created:Date.now()})})}
 function watchViews(){var root=q('main');if(root&&window.MutationObserver)new MutationObserver(function(){flush()}).observe(root,{subtree:true,attributes:true,attributeFilter:['class']});d.addEventListener('click',function(){setTimeout(flush,0)},true)}
 function clamp(){try{d.documentElement.scrollLeft=0;d.body.scrollLeft=0;if(window.scrollX)window.scrollTo(0,window.scrollY)}catch(e){}}
-function overflowAudit(){var vw=d.documentElement.clientWidth,els=d.querySelectorAll('body *'),bad=0;for(var i=0;i<els.length&&bad<30;i++){var e=els[i],r=e.getBoundingClientRect();if(r.right>vw+2&&getComputedStyle(e).position!=='fixed'){var c=e.classList;if(c&&(c.contains('heat')||c.contains('btrow')||c.contains('labRow')))continue;e.style.maxWidth='100%';e.style.minWidth='0';bad++}}clamp()}
-function boot(){viewportMeta();addStyle();watchViews();setTimeout(overflowAudit,300);setTimeout(overflowAudit,1500);window.addEventListener('resize',function(){setTimeout(overflowAudit,80)},{passive:true});window.addEventListener('orientationchange',function(){setTimeout(overflowAudit,250)},{passive:true});d.addEventListener('visibilitychange',function(){if(!d.hidden)flush()})}
+function overflowAudit(){var vw=d.documentElement.clientWidth,els=d.querySelectorAll('body *'),bad=0;for(var i=0;i<els.length&&bad<40;i++){var e=els[i],r=e.getBoundingClientRect();if(r.right>vw+2&&getComputedStyle(e).position!=='fixed'){var c=e.classList;if(c&&(c.contains('heat')||c.contains('btrow')||c.contains('labRow')))continue;e.style.maxWidth='100%';e.style.minWidth='0';bad++}}clamp()}
+function boot(){viewportMeta();addStyle();watchViews();setTimeout(overflowAudit,250);setTimeout(overflowAudit,1300);setTimeout(overflowAudit,3500);window.addEventListener('resize',function(){setTimeout(overflowAudit,80)},{passive:true});window.addEventListener('orientationchange',function(){setTimeout(overflowAudit,250)},{passive:true});d.addEventListener('visibilitychange',function(){if(!d.hidden){flush();setTimeout(overflowAudit,80)}})}
 boot();
 })();
