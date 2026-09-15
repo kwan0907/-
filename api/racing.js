@@ -92,6 +92,22 @@ function normalizeOdds(pools=[]){
     }))
   }));
 }
+function syncRunnerWinOdds(meeting,odds,raceNo){
+  if(!meeting)return;
+  const win=(odds||[]).find(p=>p.oddsType==='WIN');
+  if(!win)return;
+  const map={};
+  for(const node of win.oddsNodes||[]){
+    const key=normalizeComb(node.combString),v=String(node.oddsValue??'').trim();
+    if(key&&v)map[key]=v;
+  }
+  const race=(meeting.races||[]).find(r=>Number(r.no)===Number(raceNo));
+  if(!race)return;
+  for(const runner of race.runners||[]){
+    const key=String(Number(runner.no||0));
+    if(key!=='0'&&map[key])runner.winOdds=map[key];
+  }
+}
 export default async function handler(req,res){
   try{
     const requestedRaceNo=Math.max(1,Number(req.query.raceNo||1)),requestedDate=req.query.date||null,requestedVenue=req.query.venueCode||null;
@@ -99,6 +115,7 @@ export default async function handler(req,res){
     const date=requestedDate||selectedMeeting.date,venueCode=requestedVenue||selectedMeeting.venueCode,raceNo=requestedRaceNo;
     const oddsData=await gql(ODDS_QUERY,{date,venueCode,oddsTypes:['WIN','PLA','QIN','QPL'],raceNo},'racing');
     const meeting=(meetingData?.raceMeetings||[]).find(m=>m.date===date&&m.venueCode===venueCode)||selectedMeeting,rawOdds=oddsData?.raceMeetings?.[0]?.pmPools||[],odds=normalizeOdds(rawOdds),pools=poolsForRace(meeting?.poolInvs||[],raceNo);
+    syncRunnerWinOdds(meeting,odds,raceNo);
     res.setHeader('Cache-Control','no-store, max-age=0'); res.status(200).json({ok:true,fetchedAt:new Date().toISOString(),source:'HKJC public GraphQL',resolved:{date,venueCode,raceNo},activeMeetings:meetingData?.activeMeetings||[],raceMeetings:meetingData?.raceMeetings||[],odds,pools,totalInvestment:meeting?.totalInvestment??null});
   }catch(error){res.setHeader('Cache-Control','no-store, max-age=0');res.status(502).json({ok:false,error:error?.name==='AbortError'?'HKJC request timeout':(error?.message||'HKJC data unavailable'),upstreamStatus:error?.upstreamStatus??null,upstreamContentType:error?.upstreamContentType??null,retrievedAt:new Date().toISOString()});}
 }
