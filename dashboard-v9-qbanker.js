@@ -1,0 +1,12 @@
+(function(){
+'use strict';
+if(window.__SMARTBET_QBANKER_V9__)return;window.__SMARTBET_QBANKER_V9__='20260916-qb1';
+var d=document,main=d.querySelector('main'),nav=d.getElementById('bottomNav');if(!main||!nav)return;
+var css='.qbankView{padding:0!important;min-height:calc(100vh - 86px)}.qbankFrame{display:block;width:100%;height:calc(100vh - 86px - env(safe-area-inset-bottom));border:0;background:#06100c}.qbankHomeCard{margin:8px 0;border:1px solid #3a654f;background:linear-gradient(135deg,#0c2d20,#081710);border-radius:14px;padding:12px}.qbankHomeCard .qbrow{display:flex;align-items:center;justify-content:space-between;gap:10px}.qbankHomeCard b{font-size:14px}.qbankHomeCard span{font-size:9px;color:#9fc7b2}.qbankHomeCard button{border:1px solid #4b8064;background:#72ebb0;color:#052015;border-radius:10px;padding:8px 12px;font-weight:950}.bottomnav{grid-template-columns:repeat(6,1fr)!important}@media(max-width:380px){.bottomnav button{font-size:8px!important}.bottomnav button b{font-size:16px!important}}';
+var st=d.createElement('style');st.textContent=css;d.head.appendChild(st);
+var v=d.createElement('section');v.id='qbank';v.className='view qbankView';v.innerHTML='<iframe id="qbankFrame" class="qbankFrame" title="Q Banker" data-src="/qbanker.html"></iframe>';main.appendChild(v);
+var more=nav.querySelector('[data-more]'),btn=d.createElement('button');btn.setAttribute('data-qbank','1');btn.innerHTML='<b>Q</b>Q膽';if(more)nav.insertBefore(btn,more);else nav.appendChild(btn);
+function openQ(){var views=d.querySelectorAll('.view'),i;for(i=0;i<views.length;i++)views[i].classList.toggle('on',views[i]===v);var bs=nav.querySelectorAll('button');for(i=0;i<bs.length;i++)bs[i].classList.toggle('on',bs[i]===btn);var f=d.getElementById('qbankFrame');if(f&&!f.getAttribute('src'))f.setAttribute('src',f.getAttribute('data-src'));var top=d.getElementById('nav');if(top)top.classList.remove('open');window.scrollTo(0,0)}
+btn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();openQ()},true);
+var home=d.getElementById('home');if(home){var card=d.createElement('div');card.className='qbankHomeCard';card.innerHTML='<div class="qbrow"><div><b>Q膽候選 Pro</b><br><span>WIN 冷門 × Q/QP 超額支持 · 專攻跑入 1／2 名訊號</span></div><button type="button">打開 Q膽</button></div>';var target=d.getElementById('homeFilters');if(target&&target.parentNode)target.parentNode.insertBefore(card,target.nextSibling);else home.insertBefore(card,home.firstChild);card.querySelector('button').onclick=openQ}
+})();
