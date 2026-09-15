@@ -1,21 +1,35 @@
 (function(){
 'use strict';
-if(window.__SMARTBET_LAYOUT_V12__)return;window.__SMARTBET_LAYOUT_V12__='20260916-layout1';
+if(window.__SMARTBET_LAYOUT_V12__)return;window.__SMARTBET_LAYOUT_V12__='20260916-layout2';
 var d=document;
-function q(s){return d.querySelector(s)}
 function byId(id){return d.getElementById(id)}
+function qs(s,r){return (r||d).querySelector(s)}
+function qsa(s,r){return Array.prototype.slice.call((r||d).querySelectorAll(s))}
 function style(){var s=d.createElement('style');s.textContent='\
 .bottomnav{grid-template-columns:repeat(5,1fr)!important}\
 .bottomnav [data-v="research"],.bottomnav [data-v="health"],.bottomnav [data-v="backtest"]{display:none!important}\
 .dashgrid.heatOnly{grid-template-columns:1fr!important}\
 .dashgrid.heatOnly>.card{grid-column:1/-1!important;width:100%!important;max-width:100%!important}\
 #raceControl{margin-top:8px}\
+.flow .hn{font-size:14px!important;line-height:1.05!important}.flow .hn small{font-size:9px!important;margin-top:3px!important;color:#9db7a8!important}.flow .val{font-size:11px!important;line-height:1!important;font-weight:950!important;z-index:4!important;padding:3px 6px!important;border-radius:6px!important;background:#071710cc!important;box-shadow:0 0 0 1px #ffffff10!important;min-width:32px!important;text-align:center!important}.flow .half:first-child .val{bottom:7px!important}.flow .half:last-child .val{top:7px!important}.flow .val.qzero{opacity:.55!important;font-size:9px!important}.flow .col.qconfirmed{filter:drop-shadow(0 0 8px #55e1a055)}.flow .col.qconfirmed .hn{color:#ffe37b!important;text-shadow:0 0 8px #ffe37b55}\
+#qConfirmPanel{margin:0 0 9px;border:1px solid #315542;background:linear-gradient(135deg,#0b2419,#081710);border-radius:14px;padding:10px}.qcHead{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px}.qcHead b{font-size:14px}.qcHead small{font-size:8px;color:#7f9d8d}.qcGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.qcCard{border:1px solid #2c513e;background:#071710;border-radius:12px;padding:9px}.qcCard.ok{border-color:#59d79a}.qcTop{display:flex;justify-content:space-between;gap:6px}.qcHorse{font-size:15px;font-weight:950}.qcBadge{font-size:8px;font-weight:950;border-radius:99px;padding:4px 7px;background:#123c2a;color:#7df0b4;white-space:nowrap}.qcBadge.watch{background:#3b3112;color:#f2cd67}.qcNums{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:7px}.qcNum{background:#0b2118;border-radius:8px;padding:6px;text-align:center}.qcNum small{display:block;color:#789586;font-size:7px}.qcNum b{font-size:12px}.qcEmpty{padding:11px;color:#8ca797;font-size:10px;text-align:center;border:1px dashed #294737;border-radius:10px}\
+@media(max-width:700px){.qcGrid{grid-template-columns:1fr}.flow .hn{font-size:13px!important}.flow .hn small{font-size:9px!important}.flow .val{font-size:10px!important;padding:3px 5px!important}}\
 ';d.head.appendChild(s)}
 function hideOddsDist(){var el=byId('oddsDist');if(!el)return;var card=el.closest('.card');if(!card)return;card.style.display='none';var g=card.parentElement;if(g&&g.classList.contains('dashgrid'))g.classList.add('heatOnly')}
 function moveControlRoom(){var rc=byId('raceControl'),health=byId('health');if(!rc||!health||rc.parentElement===health)return;if(!byId('systemToolsHead')){var h=d.createElement('div');h.id='systemToolsHead';h.className='card';h.innerHTML='<div class="ey">SYSTEM STATUS</div><div class="title">系統狀態 / Research Lab</div><div class="sub">Race Day Control Room、Watchdog、Health 同研究工具集中喺「更多」入面。</div>';health.insertBefore(h,health.firstChild)}health.insertBefore(rc,health.children[1]||health.firstChild)}
 function tidyBottom(){var b=byId('bottomNav');if(!b)return;['research','health','backtest'].forEach(function(v){var x=b.querySelector('[data-v="'+v+'"]');if(x)x.style.display='none'})}
-function run(){hideOddsDist();moveControlRoom();tidyBottom()}
-style();run();
-var mo=new MutationObserver(function(){run()});mo.observe(d.documentElement,{childList:true,subtree:true});
-setInterval(run,1500);
+function n(v){v=Number(v);return isFinite(v)&&v>0?v:null}
+function comb(v){var a=String(v==null?'':v).match(/\d+/g)||[];if(a.length===1)return String(Number(a[0]));if(a.length>=2){var z=[Number(a[0]),Number(a[1])].sort(function(a,b){return a-b});return z.join(',')}return''}
+function raceNo(){var b=qs('.race button.on[data-race],#homeRaces button.on[data-race]');if(b)return Number(b.getAttribute('data-race'))||1;var h=byId('homeMeeting'),m=h&&h.textContent.match(/R(\d+)/);return m?Number(m[1]):1}
+function meet(){var h=byId('homeMeeting'),m=h&&h.textContent.match(/^([A-Z]{2})\s+(\d{4}-\d{2}-\d{2})/);return m?{venue:m[1],date:m[2]}:{}}
+function single(j,t){var p=(j.odds||[]).find(function(x){return x.oddsType===t}),o={},tot=0;(p&&p.oddsNodes||[]).forEach(function(x){var v=n(x.oddsValue),k=comb(x.combString);if(v){o[k]=1/v;tot+=1/v}});if(tot)Object.keys(o).forEach(function(k){o[k]/=tot});return o}
+function pair(j,t){var p=(j.odds||[]).find(function(x){return x.oddsType===t}),o={},tot=0;(p&&p.oddsNodes||[]).forEach(function(x){var v=n(x.oddsValue),a=comb(x.combString).split(',');if(v&&a.length===2){var w=1/v/2;o[a[0]]=(o[a[0]]||0)+w;o[a[1]]=(o[a[1]]||0)+w;tot+=1/v}});if(tot)Object.keys(o).forEach(function(k){o[k]/=tot});return o}
+function bars(){var out=[];qsa('#bars .flow .col,.flow .col').forEach(function(c){var hn=qs('.hn',c),val=qs('.val',c);if(!hn||!val)return;var a=hn.textContent.match(/\b(\d{1,2})\b/),b=val.textContent.match(/[+-]?\d+/);if(!a||!b)return;var sf=Number(b[0]);val.classList.toggle('qzero',sf===0);out.push({no:Number(a[1]),sf:sf,col:c})});return out}
+function mount(){var f=qs('#bars .flow')||qs('.flow');if(!f)return null;var p=byId('qConfirmPanel');if(!p){p=d.createElement('div');p.id='qConfirmPanel';f.parentNode.insertBefore(p,f)}return p}
+function pct(v){return(v>=0?'+':'')+Math.round(v*100)+'%'}
+function draw(j){var p=mount(),a=bars();if(!p)return;qsa('.flow .col').forEach(function(c){c.classList.remove('qconfirmed')});if(!j||!j.ok||!a.length){p.innerHTML='<div class="qcHead"><b>✅ Q膽確認</b><small>SmartFlow × Q/QP</small></div><div class="qcEmpty">等待完整即時數據…</div>';return}var w=single(j,'WIN'),q=pair(j,'QIN'),qp=pair(j,'QPL'),race=((j.raceMeetings||[])[0]&&((j.raceMeetings||[])[0].races||[]).find(function(x){return Number(x.no)===raceNo()})),names={};((race&&race.runners)||[]).forEach(function(x){if(Number(x.no))names[Number(x.no)]=x.name_ch||x.name_en||''});a.forEach(function(x){var k=String(x.no),base=w[k]||0;x.q=base&&q[k]?q[k]/base-1:-99;x.qp=base&&qp[k]?qp[k]/base-1:-99;x.ok=x.sf>=25&&x.q>=.20&&x.qp>=.20;x.watch=!x.ok&&x.sf>=20&&(x.q>=.20||x.qp>=.20);x.score=x.sf+Math.max(-20,Math.min(80,x.q*45))+Math.max(-20,Math.min(80,x.qp*45))});var pick=a.filter(function(x){return x.ok||x.watch}).sort(function(a,b){if(a.ok!==b.ok)return a.ok?-1:1;return b.score-a.score}).slice(0,3),html='<div class="qcHead"><b>✅ Q膽確認</b><small>SF ≥ +25 · Q ≥ +20% · QP ≥ +20%</small></div>';if(!pick.length){html+='<div class="qcEmpty">目前未有馬匹同時通過 3 個確認條件；系統會自動更新。</div>'}else{html+='<div class="qcGrid">';pick.forEach(function(x){if(x.ok)x.col.classList.add('qconfirmed');html+='<div class="qcCard '+(x.ok?'ok':'')+'"><div class="qcTop"><div class="qcHorse">#'+x.no+' '+(names[x.no]||'')+'</div><span class="qcBadge '+(x.ok?'':'watch')+'">'+(x.ok?'Q膽確認':'觀察')+'</span></div><div class="qcNums"><div class="qcNum"><small>SmartFlow</small><b>'+(x.sf>0?'+':'')+x.sf+'</b></div><div class="qcNum"><small>Q vs WIN</small><b>'+pct(x.q)+'</b></div><div class="qcNum"><small>QP vs WIN</small><b>'+pct(x.qp)+'</b></div></div></div>'});html+='</div>'}p.innerHTML=html}
+var busy=false;function updateQ(){if(!mount()||busy)return;busy=true;var m=meet(),r=raceNo(),u='/api/racing?raceNo='+r+(m.date?'&date='+encodeURIComponent(m.date):'')+(m.venue?'&venueCode='+encodeURIComponent(m.venue):'');fetch(u,{cache:'no-store'}).then(function(r){return r.json()}).then(draw).catch(function(){draw({ok:false})}).finally(function(){busy=false})}
+function run(){hideOddsDist();moveControlRoom();tidyBottom();updateQ()}
+style();run();setInterval(run,15000);
+var mo=new MutationObserver(function(){clearTimeout(window.__qct);window.__qct=setTimeout(updateQ,450)});mo.observe(d.documentElement,{childList:true,subtree:true,characterData:true});
 })();
