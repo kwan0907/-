@@ -75,13 +75,30 @@ async function gql(query, variables = {}, operationName) {
   } finally { clearTimeout(timer); }
 }
 function poolsForRace(poolInvs=[],raceNo){return poolInvs.filter(p=>(p.leg?.races||[]).map(Number).includes(Number(raceNo))&&['WIN','PLA','QIN','QPL'].includes(p.oddsType));}
+function normalizeComb(v){
+  const raw=String(v??'').trim();
+  const nums=raw.match(/\d+/g);
+  if(nums&&nums.length===1)return String(Number(nums[0]));
+  if(nums&&nums.length===2)return nums.map(Number).sort((a,b)=>a-b).join(',');
+  return raw;
+}
+function normalizeOdds(pools=[]){
+  return pools.map(pool=>({
+    ...pool,
+    oddsNodes:(pool.oddsNodes||[]).map(node=>({
+      ...node,
+      combString:normalizeComb(node.combString),
+      bankerOdds:(node.bankerOdds||[]).map(b=>({...b,combString:normalizeComb(b.combString)}))
+    }))
+  }));
+}
 export default async function handler(req,res){
   try{
     const requestedRaceNo=Math.max(1,Number(req.query.raceNo||1)),requestedDate=req.query.date||null,requestedVenue=req.query.venueCode||null;
     const meetingData=await gql(HORSE_QUERY,{date:requestedDate,venueCode:requestedVenue}); const selectedMeeting=(meetingData?.raceMeetings||[])[0]||(meetingData?.activeMeetings||[])[0]; if(!selectedMeeting)throw new Error('No active HKJC race meeting');
     const date=requestedDate||selectedMeeting.date,venueCode=requestedVenue||selectedMeeting.venueCode,raceNo=requestedRaceNo;
     const oddsData=await gql(ODDS_QUERY,{date,venueCode,oddsTypes:['WIN','PLA','QIN','QPL'],raceNo},'racing');
-    const meeting=(meetingData?.raceMeetings||[]).find(m=>m.date===date&&m.venueCode===venueCode)||selectedMeeting,odds=oddsData?.raceMeetings?.[0]?.pmPools||[],pools=poolsForRace(meeting?.poolInvs||[],raceNo);
+    const meeting=(meetingData?.raceMeetings||[]).find(m=>m.date===date&&m.venueCode===venueCode)||selectedMeeting,rawOdds=oddsData?.raceMeetings?.[0]?.pmPools||[],odds=normalizeOdds(rawOdds),pools=poolsForRace(meeting?.poolInvs||[],raceNo);
     res.setHeader('Cache-Control','no-store, max-age=0'); res.status(200).json({ok:true,fetchedAt:new Date().toISOString(),source:'HKJC public GraphQL',resolved:{date,venueCode,raceNo},activeMeetings:meetingData?.activeMeetings||[],raceMeetings:meetingData?.raceMeetings||[],odds,pools,totalInvestment:meeting?.totalInvestment??null});
   }catch(error){res.setHeader('Cache-Control','no-store, max-age=0');res.status(502).json({ok:false,error:error?.name==='AbortError'?'HKJC request timeout':(error?.message||'HKJC data unavailable'),upstreamStatus:error?.upstreamStatus??null,upstreamContentType:error?.upstreamContentType??null,retrievedAt:new Date().toISOString()});}
 }
