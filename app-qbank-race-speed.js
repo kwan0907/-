@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 if(window.__SB_RACE_SPEED__)return;
-window.__SB_RACE_SPEED__='20260916-rs2';
+window.__SB_RACE_SPEED__='20260916-rs3';
 var sequence=0,pending=null,noticeEl=null;
 function key(){var m=state.meeting||{};return [m.date||'',m.venueCode||'',Number(state.raceNo)||1].join(':')}
 function notice(text,error){var host=document.querySelector('#liveDashboard .qSpecHost');if(!host)return;if(!noticeEl||!noticeEl.isConnected){noticeEl=document.createElement('div');noticeEl.id='qRaceSpeedStatus';noticeEl.setAttribute('role','status');noticeEl.style.cssText='background:#e9f2eb;color:#21523a;border-radius:8px;padding:8px 12px;margin:9px 10px 0;font:600 12px Arial,sans-serif';host.insertBefore(noticeEl,host.querySelector('.qSpec')||null)}noticeEl.textContent=text||'';noticeEl.style.display=text?'block':'none';noticeEl.style.background=error?'#fff0eb':'#e9f2eb'}
@@ -12,7 +12,7 @@ function switchRace(no){no=Number(no);if(!Number.isInteger(no)||no<1||no===Numbe
  state.raceNo=no;state.race=(state.races||[]).find(function(r){return Number(r.no)===no})||null;
  state.banker=null;state.legs.clear();state.singles.clear();state.odds={};state.pools={};state.snapshots=[];state.currentRows=[];
  try{renderMeeting();renderRaces();updateCountdown();renderHorseGrid();renderBetting()}catch(e){console.warn('race switch display',e)}
- clearPrevious();refreshChart();notice('R'+no+' · 正在更新新場數據…');loadData(true)
+ clearPrevious();notice('R'+no+' · 正在更新新場數據…');loadData(true)
 }
 loadData=async function(manual){var requestKey=key();
  if(pending&&pending.key===requestKey)return pending.promise;
