@@ -4,7 +4,7 @@ const state = {
   selectedPools: new Set(['QIN','QPL']), pickMode: 'pair', banker: null, legs: new Set(), singles: new Set(),
   interval: 10000, timer: null, allocation: 'smart', locked: false,
   snapshots: [], currentRows: [], flowFilter: 'all', heatSort: 'oddsAsc', heatColdOnly: false,
-  snapshotId: 0, apiFetchedAt: null, cloudHistoryKey: '', cloudHistoryAt: 0,
+  snapshotId: 0, apiFetchedAt: null, cloudHistoryKey: '', cloudHistoryAt: 0, cloudHistoryLastSnapshotId: 0,
   loadPromise: null, loadQueued: false, lastAppliedSnapshotId: 0
 };
 const POOL_LABEL = {WIN:'WIN',PLA:'P',QIN:'Q',QPL:'QP'};
@@ -91,19 +91,30 @@ function liveHistorySnapshot(f){
 async function syncCloudHistory(){
   const m=state.meeting;if(!m?.date||!m?.venueCode||!state.raceNo)return;
   const key=`${m.date}:${m.venueCode}:${state.raceNo}`,now=Date.now();
-  if(state.cloudHistoryKey===key&&now-state.cloudHistoryAt<8000)return;
+  if(state.cloudHistoryKey!==key){state.cloudHistoryKey=key;state.cloudHistoryLastSnapshotId=0;state.snapshots=[];}
+  if(now-state.cloudHistoryAt<8000)return;
   try{
-    const q=new URLSearchParams({date:m.date,venueCode:m.venueCode,raceNo:String(state.raceNo)}),r=await fetch('/api/live-history?'+q.toString(),{cache:'no-store'}),j=await r.json();
+    const params={date:m.date,venueCode:m.venueCode,raceNo:String(state.raceNo)};
+    if(state.cloudHistoryLastSnapshotId>0)params.afterSnapshotId=String(state.cloudHistoryLastSnapshotId);
+    const q=new URLSearchParams(params),r=await fetch('/api/live-history?'+q.toString(),{cache:'no-store'}),j=await r.json();
     if(r.ok&&j.ok&&Array.isArray(j.frames)){
-      const frames=j.frames.map(liveHistorySnapshot).filter(Boolean).sort((a,b)=>a.t-b.t);
-      if(frames.length){state.snapshots=frames.slice(-450);state.cloudHistoryKey=key;state.cloudHistoryAt=now;return;}
+      const frames=j.frames.map(liveHistorySnapshot).filter(Boolean);
+      if(frames.length){
+        const byId=new Map((state.snapshots||[]).map(s=>[Number(s.snapshotId||s.t),s]));
+        frames.forEach(s=>byId.set(Number(s.snapshotId||s.t),s));
+        state.snapshots=[...byId.values()].filter(s=>s&&Number(s.t)>0&&now-Number(s.t)<=45*60*1000).sort((a,b)=>a.t-b.t).slice(-450);
+        state.cloudHistoryLastSnapshotId=Number(j.latestSnapshotId||frames.at(-1)?.snapshotId||state.cloudHistoryLastSnapshotId);
+        state.cloudHistoryAt=now;return;
+      }
+      state.cloudHistoryAt=now;return;
     }
   }catch{}
+  if(state.cloudHistoryLastSnapshotId>0)return;
   try{
     const q=new URLSearchParams({date:m.date,venueCode:m.venueCode,raceNo:String(state.raceNo)}),r=await fetch('/api/qbank-cloud?'+q.toString(),{cache:'no-store'}),j=await r.json();
     if(r.ok&&j.ok&&Array.isArray(j.frames)){
       const frames=j.frames.map(cloudSnapshotFromFrame).filter(s=>s.t>0).sort((a,b)=>a.t-b.t);
-      state.snapshots=frames.slice(-120);state.cloudHistoryKey=key;state.cloudHistoryAt=now;
+      state.snapshots=frames.slice(-120);state.cloudHistoryAt=now;
     }
   }catch{}
 }
