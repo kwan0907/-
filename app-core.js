@@ -4,7 +4,8 @@ const state = {
   selectedPools: new Set(['QIN','QPL']), pickMode: 'pair', banker: null, legs: new Set(), singles: new Set(),
   interval: 10000, timer: null, allocation: 'smart', locked: false,
   snapshots: [], currentRows: [], flowFilter: 'all', heatSort: 'oddsAsc', heatColdOnly: false,
-  snapshotId: 0, apiFetchedAt: null, cloudHistoryKey: '', cloudHistoryAt: 0
+  snapshotId: 0, apiFetchedAt: null, cloudHistoryKey: '', cloudHistoryAt: 0,
+  loadPromise: null, loadQueued: false, lastAppliedSnapshotId: 0
 };
 const POOL_LABEL = {WIN:'WIN',PLA:'P',QIN:'Q',QPL:'QP'};
 
@@ -37,12 +38,13 @@ function oddsFor(pool,key){ return asOdds(state.odds?.[pool]?.map?.[normComb(key
 function runnerNo(r){ return Number(r.no||r.saddleClothNo); }
 
 async function loadData(manual=false){
-  try{
+  if(state.loadPromise){state.loadQueued=true;return state.loadPromise;}
+  state.loadPromise=(async()=>{try{
     if(manual)$('refreshBtn').disabled=true;
     const r=await fetch(apiUrl(),{cache:'no-store'}); const j=await r.json(); if(!r.ok||!j.ok)throw new Error(j.error||`HTTP ${r.status}`);
     const incomingSnapshotId=Number(j.snapshotId||0);
-    if(incomingSnapshotId&&state.snapshotId&&incomingSnapshotId<state.snapshotId)return;
-    if(incomingSnapshotId)state.snapshotId=Math.max(state.snapshotId,incomingSnapshotId);
+    if(incomingSnapshotId&&state.lastAppliedSnapshotId&&incomingSnapshotId<state.lastAppliedSnapshotId)return;
+    if(incomingSnapshotId){state.snapshotId=Math.max(state.snapshotId,incomingSnapshotId);state.lastAppliedSnapshotId=incomingSnapshotId;}
     state.apiFetchedAt=j.fetchedAt||new Date().toISOString();
     const meeting=(j.raceMeetings||[])[0] || (j.activeMeetings||[])[0];
     if(!meeting) throw new Error('今日暫時未有可讀取賽事');
@@ -55,6 +57,8 @@ async function loadData(manual=false){
     renderMeeting(); renderRaces(); recordSnapshot(); renderMoneyFlow(); renderHorseGrid(); renderBetting(); updateCountdown();
   }catch(e){ setLive(false,'資料暫停'); $('meetingTitle').textContent='暫時未能取得 HKJC 資料'; $('raceMeta').textContent=e.message; }
   finally{ if(manual)$('refreshBtn').disabled=false; }
+  })();
+  try{return await state.loadPromise;}finally{state.loadPromise=null;if(state.loadQueued){state.loadQueued=false;setTimeout(()=>loadData(false),0);}}
 }
 
 function renderMeeting(){
@@ -80,10 +84,21 @@ function cloudSnapshotFromFrame(f){
   const cross={};Object.keys(shares.WIN||{}).forEach(no=>{cross[no]=available.reduce((sum,k)=>sum+(Number(shares[k]?.[no])||0)*(weights[k]||0),0);});
   return {t:Number(f?.t||0),postTime:state.race?.postTime||null,minutesToPost:Number(f?.mtp),pools,shares,cross,expected:shares.WIN||{},available,odds:{WIN:f?.odds||{},PLA:{}}};
 }
+function liveHistorySnapshot(f){
+  const s=f?.flowSnapshot;if(!s||!Number(s.t))return null;
+  return {...s,snapshotId:Number(f.snapshotId||f?.snapshotId||0)};
+}
 async function syncCloudHistory(){
   const m=state.meeting;if(!m?.date||!m?.venueCode||!state.raceNo)return;
   const key=`${m.date}:${m.venueCode}:${state.raceNo}`,now=Date.now();
-  if(state.cloudHistoryKey===key&&now-state.cloudHistoryAt<30000)return;
+  if(state.cloudHistoryKey===key&&now-state.cloudHistoryAt<8000)return;
+  try{
+    const q=new URLSearchParams({date:m.date,venueCode:m.venueCode,raceNo:String(state.raceNo)}),r=await fetch('/api/live-history?'+q.toString(),{cache:'no-store'}),j=await r.json();
+    if(r.ok&&j.ok&&Array.isArray(j.frames)){
+      const frames=j.frames.map(liveHistorySnapshot).filter(Boolean).sort((a,b)=>a.t-b.t);
+      if(frames.length){state.snapshots=frames.slice(-450);state.cloudHistoryKey=key;state.cloudHistoryAt=now;return;}
+    }
+  }catch{}
   try{
     const q=new URLSearchParams({date:m.date,venueCode:m.venueCode,raceNo:String(state.raceNo)}),r=await fetch('/api/qbank-cloud?'+q.toString(),{cache:'no-store'}),j=await r.json();
     if(r.ok&&j.ok&&Array.isArray(j.frames)){
