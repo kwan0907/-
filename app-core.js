@@ -3,7 +3,8 @@ const state = {
   meeting: null, races: [], raceNo: 1, race: null, odds: {}, pools: {},
   selectedPools: new Set(['QIN','QPL']), pickMode: 'pair', banker: null, legs: new Set(), singles: new Set(),
   interval: 10000, timer: null, allocation: 'smart', locked: false,
-  snapshots: [], currentRows: [], flowFilter: 'all', heatSort: 'oddsAsc', heatColdOnly: false
+  snapshots: [], currentRows: [], flowFilter: 'all', heatSort: 'oddsAsc', heatColdOnly: false,
+  snapshotId: 0, apiFetchedAt: null, cloudHistoryKey: '', cloudHistoryAt: 0
 };
 const POOL_LABEL = {WIN:'WIN',PLA:'P',QIN:'Q',QPL:'QP'};
 
@@ -39,13 +40,18 @@ async function loadData(manual=false){
   try{
     if(manual)$('refreshBtn').disabled=true;
     const r=await fetch(apiUrl(),{cache:'no-store'}); const j=await r.json(); if(!r.ok||!j.ok)throw new Error(j.error||`HTTP ${r.status}`);
+    const incomingSnapshotId=Number(j.snapshotId||0);
+    if(incomingSnapshotId&&state.snapshotId&&incomingSnapshotId<state.snapshotId)return;
+    if(incomingSnapshotId)state.snapshotId=Math.max(state.snapshotId,incomingSnapshotId);
+    state.apiFetchedAt=j.fetchedAt||new Date().toISOString();
     const meeting=(j.raceMeetings||[])[0] || (j.activeMeetings||[])[0];
     if(!meeting) throw new Error('今日暫時未有可讀取賽事');
     state.meeting=meeting; state.races=meeting.races||[];
     if(!state.races.find(r=>Number(r.no)===Number(state.raceNo))) state.raceNo=Number(state.races[0]?.no||1);
     state.race=state.races.find(r=>Number(r.no)===Number(state.raceNo))||state.races[0];
     state.odds=oddsMap(j.odds||[]); state.pools=poolMap(j.pools||[]);
-    $('updatedAt').textContent=nowHK(); setLive(true,'HKJC LIVE');
+    await syncCloudHistory();
+    $('updatedAt').textContent=state.snapshotId?`#${String(state.snapshotId).slice(-6)} · ${fmtTime(state.apiFetchedAt)}`:nowHK(); setLive(true,'HKJC LIVE');
     renderMeeting(); renderRaces(); recordSnapshot(); renderMoneyFlow(); renderHorseGrid(); renderBetting(); updateCountdown();
   }catch(e){ setLive(false,'資料暫停'); $('meetingTitle').textContent='暫時未能取得 HKJC 資料'; $('raceMeta').textContent=e.message; }
   finally{ if(manual)$('refreshBtn').disabled=false; }
@@ -67,6 +73,25 @@ function updateCountdown(){
 setInterval(updateCountdown,1000);
 
 function snapshotStoreKey(){ return `smartbet-flow3:${state.meeting?.date||'na'}:${state.meeting?.venueCode||'na'}:${state.raceNo}`; }
+function cloudSnapshotFromFrame(f){
+  const shares=f?.shares||{},available=Object.keys(shares).filter(k=>Object.values(shares[k]||{}).some(v=>Number(v)>0)),pools=f?.pools||{};
+  let invTotal=0;const inv={},weights={};available.forEach(k=>{inv[k]=Math.max(0,Number(pools[k]||0));invTotal+=inv[k];});
+  available.forEach(k=>weights[k]=invTotal>0?(0.35/available.length+0.65*(inv[k]/invTotal)):(1/Math.max(1,available.length)));
+  const cross={};Object.keys(shares.WIN||{}).forEach(no=>{cross[no]=available.reduce((sum,k)=>sum+(Number(shares[k]?.[no])||0)*(weights[k]||0),0);});
+  return {t:Number(f?.t||0),postTime:state.race?.postTime||null,minutesToPost:Number(f?.mtp),pools,shares,cross,expected:shares.WIN||{},available,odds:{WIN:f?.odds||{},PLA:{}}};
+}
+async function syncCloudHistory(){
+  const m=state.meeting;if(!m?.date||!m?.venueCode||!state.raceNo)return;
+  const key=`${m.date}:${m.venueCode}:${state.raceNo}`,now=Date.now();
+  if(state.cloudHistoryKey===key&&now-state.cloudHistoryAt<30000)return;
+  try{
+    const q=new URLSearchParams({date:m.date,venueCode:m.venueCode,raceNo:String(state.raceNo)}),r=await fetch('/api/qbank-cloud?'+q.toString(),{cache:'no-store'}),j=await r.json();
+    if(r.ok&&j.ok&&Array.isArray(j.frames)){
+      const frames=j.frames.map(cloudSnapshotFromFrame).filter(s=>s.t>0).sort((a,b)=>a.t-b.t);
+      state.snapshots=frames.slice(-120);state.cloudHistoryKey=key;state.cloudHistoryAt=now;
+    }
+  }catch{}
+}
 function activeRunners(){ return (state.race?.runners||[]).filter(r=>runnerNo(r)&&!['SCRATCHED','Scratched','Standby'].includes(r.status)); }
 function normalizeWeights(obj){
   const vals=Object.values(obj).filter(v=>Number.isFinite(v)&&v>0), total=vals.reduce((a,b)=>a+b,0);
@@ -93,13 +118,15 @@ function currentSupportModel(){
 function rawSingleOdds(pool){ const o={}; activeRunners().forEach(r=>{const no=runnerNo(r),v=oddsFor(pool,String(no));if(v)o[no]=v;}); return o; }
 function buildSnapshot(){
   const model=currentSupportModel();
-  return {t:Date.now(),postTime:state.race?.postTime||null,minutesToPost:minutesToPost(),pools:Object.fromEntries(['WIN','PLA','QIN','QPL'].map(k=>[k,Number(state.pools[k]?.investment||0)])),shares:model.shares,cross:model.cross,expected:model.expected,available:model.available,odds:{WIN:rawSingleOdds('WIN'),PLA:rawSingleOdds('PLA')}};
+  const apiTime=Date.parse(state.apiFetchedAt||'');
+  return {t:Number.isFinite(apiTime)?apiTime:Date.now(),snapshotId:state.snapshotId||0,postTime:state.race?.postTime||null,minutesToPost:minutesToPost(),pools:Object.fromEntries(['WIN','PLA','QIN','QPL'].map(k=>[k,Number(state.pools[k]?.investment||0)])),shares:model.shares,cross:model.cross,expected:model.expected,available:model.available,odds:{WIN:rawSingleOdds('WIN'),PLA:rawSingleOdds('PLA')}};
 }
 function recordSnapshot(){
-  if(!state.race)return; let arr=[]; try{arr=JSON.parse(localStorage.getItem(snapshotStoreKey())||'[]');}catch{}
-  const snap=buildSnapshot(),last=arr[arr.length-1];
-  if(!last||snap.t-last.t>=4000){arr.push(snap);arr=arr.filter(x=>snap.t-x.t<=45*60*1000).slice(-450);try{localStorage.setItem(snapshotStoreKey(),JSON.stringify(arr));}catch{}}
-  state.snapshots=arr;
+  if(!state.race)return;
+  const snap=buildSnapshot();let arr=(state.snapshots||[]).filter(x=>x&&Number(x.t)>0&&snap.t-Number(x.t)<=45*60*1000&&Number(x.t)<=snap.t);
+  const same=arr.findIndex(x=>(snap.snapshotId&&x.snapshotId===snap.snapshotId)||Number(x.t)===Number(snap.t));
+  if(same>=0)arr[same]=snap;else arr.push(snap);
+  arr.sort((a,b)=>a.t-b.t);state.snapshots=arr.slice(-450);
 }
 function previousSnapshot(minAgo=3){
   const target=Date.now()-minAgo*60000,arr=state.snapshots||[];if(!arr.length)return null;let best=null,dist=Infinity;
