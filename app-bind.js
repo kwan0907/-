@@ -9,5 +9,11 @@ function bind(){
   $('allocationControl').onclick=e=>{const b=e.target.closest('[data-mode]');if(!b)return;state.allocation=b.dataset.mode;document.querySelectorAll('#allocationControl button').forEach(x=>x.classList.toggle('active',x===b));renderBetting();};
   $('lockBtn').onclick=lockCurrent;$('copySlipBtn').onclick=copySlip;$('hkjcBtn').onclick=sendOfficial;
 }
-function restartTimer(){clearInterval(state.timer);state.timer=setInterval(()=>loadData(false),state.interval);}
+function shouldPoll(){return !document.hidden&&navigator.onLine!==false;}
+function restartTimer(){
+  clearInterval(state.timer);
+  state.timer=setInterval(()=>{if(shouldPoll())loadData(false);},Math.max(5000,state.interval));
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&navigator.onLine!==false)loadData(false);});
+window.addEventListener('online',()=>loadData(false));
 bind();setPickMode('pair');renderBetting();loadData(false).then(restartTimer);
