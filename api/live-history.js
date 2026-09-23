@@ -5,7 +5,7 @@ export default async function handler(req,res){
   res.setHeader('Cache-Control','no-store, max-age=0');
   if(req.method!=='GET')return res.status(405).json({ok:false,error:'method not allowed'});
   const q=new URLSearchParams();
-  for(const k of ['date','venueCode','raceNo']){const v=req.query?.[k];if(v!=null&&v!=='')q.set(k,String(Array.isArray(v)?v[0]:v));}
+  for(const k of ['date','venueCode','raceNo','afterSnapshotId']){const v=req.query?.[k];if(v!=null&&v!=='')q.set(k,String(Array.isArray(v)?v[0]:v));}
   const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),10000);
   try{
     const r=await fetch(UP+'?'+q.toString(),{signal:ctl.signal,cache:'no-store',headers:{accept:'application/json',apikey:ANON,authorization:'Bearer '+ANON,'user-agent':'SmartBet-Live-History-Proxy/1.0'}});
