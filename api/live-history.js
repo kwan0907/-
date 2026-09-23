@@ -1,5 +1,5 @@
 const UP='https://ajnunehxtiofcphdyhqn.supabase.co/functions/v1/smartbet-live-history';
-const ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYXNlIiwicmVmIjoiYWpudW5laHh0aW9mY3BoZHlocW4iLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3NjEzOTgzNywiZXhwIjoyMDkxNzE1ODM3fQ.vn74xMzEm-fj7Gzhosxvn5UQWozAf_8LrDHXG3kycT4';
+const ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbnVuZWh4dGlvZmNwaGR5aHFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMzk4MzcsImV4cCI6MjA5MTcxNTgzN30.vn74xMzEm-fj7Gzhosxvn5UQWozAf_8LrDHXG3kycT4';
 export default async function handler(req,res){
   res.setHeader('Content-Type','application/json; charset=utf-8');
   res.setHeader('Cache-Control','no-store, max-age=0');
