@@ -1,24 +1,21 @@
-const ENDPOINT='https://info.cld.hkjc.com/graphql/base/';
-const HEADERS={'content-type':'application/json','accept':'application/json, text/plain, */*','accept-language':'zh-HK,zh;q=0.9,en;q=0.8','origin':'https://bet.hkjc.com','referer':'https://bet.hkjc.com/','user-agent':'Mozilla/5.0'};
-const CORE=['WIN','PLA','QIN','QPL'],DEEP=['FCT','TRI','TCE','FF','QTT','DBL'],ALL=CORE.concat(DEEP);
-const ODDS_QUERY=`query racing($date: String, $venueCode: String, $oddsTypes: [OddsType], $raceNo: Int) {
-  raceMeetings(date: $date, venueCode: $venueCode) {
-    pmPools(oddsTypes: $oddsTypes, raceNo: $raceNo) {
-      id status sellStatus oddsType lastUpdateTime guarantee minTicketCost name_en name_ch
-      leg { number races }
-      cWinSelections { composite name_ch name_en starters }
-      oddsNodes { combString oddsValue hotFavourite oddsDropValue bankerOdds { combString oddsValue } }
-    }
+const UP='https://ajnunehxtiofcphdyhqn.supabase.co/functions/v1/smartbet-qspec';
+const ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbnVuZWh4dGlvZmNwaGR5aHFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMzk4MzcsImV4cCI6MjA5MTcxNTgzN30.vn74xMzEm-fj7Gzhosxvn5UQWozAf_8LrDHXG3kycT4';
+export default async function handler(req,res){
+  res.setHeader('Content-Type','application/json; charset=utf-8');
+  res.setHeader('Cache-Control','no-store, max-age=0');
+  if(req.method!=='GET')return res.status(405).json({ok:false,error:'method not allowed'});
+  const q=new URLSearchParams();
+  for(const k of ['date','venueCode','raceNo','history','afterSnapshotId']){
+    const v=req.query?.[k];if(v!=null&&v!=='')q.set(k,String(Array.isArray(v)?v[0]:v));
   }
-}`;
-async function gql(oddsTypes,date,venueCode,raceNo){const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),8500);try{const r=await fetch(ENDPOINT,{method:'POST',headers:HEADERS,body:JSON.stringify({operationName:'racing',query:ODDS_QUERY,variables:{date,venueCode,oddsTypes,raceNo}}),signal:ctl.signal});const t=await r.text();let j;try{j=JSON.parse(t)}catch{throw new Error('HKJC invalid JSON')}if(!r.ok||j.errors?.length)throw new Error(j.errors?.map(x=>x.message).join('; ')||`HKJC HTTP ${r.status}`);return j.data?.raceMeetings?.[0]?.pmPools||[];}finally{clearTimeout(tm)}}
-function nums(v){return (String(v??'').match(/\d+/g)||[]).map(Number).filter(n=>n>0)}function val(v){v=Number(v);return Number.isFinite(v)&&v>0?v:null}
-function marginal(pool){const raw={};let total=0;for(const n of pool?.oddsNodes||[]){const o=val(n.oddsValue),a=nums(n.combString);if(!o||!a.length)continue;const w=1/o,each=w/a.length;for(const h of a)raw[h]=(raw[h]||0)+each;total+=w}const out={};if(total>0)for(const k of Object.keys(raw))out[k]=raw[k]/total;return out}
-function pctEx(poolShare,winShare){if(!(poolShare>0)||!(winShare>0))return null;return poolShare/winShare-1}
-async function base(req,date,venueCode,raceNo){const proto=(req.headers['x-forwarded-proto']||'https').split(',')[0],host=req.headers.host;if(!host)throw new Error('host unavailable');const u=`${proto}://${host}/api/racing?date=${encodeURIComponent(date)}&venueCode=${encodeURIComponent(venueCode)}&raceNo=${raceNo}`;const r=await fetch(u,{headers:{accept:'application/json'},cache:'no-store'});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||`base racing ${r.status}`);return j}
-async function deepPools(date,venueCode,raceNo){try{return{items:await gql(DEEP,date,venueCode,raceNo),failed:[]}}catch(e){const attempts=await Promise.allSettled(DEEP.map(t=>gql([t],date,venueCode,raceNo))),items=[],failed=[];attempts.forEach((a,i)=>{if(a.status==='fulfilled')items.push(...a.value);else failed.push(DEEP[i])});return{items,failed}}}
-export default async function handler(req,res){try{const raceNo=Math.max(1,Number(req.query.raceNo||1)),date=req.query.date||null,venueCode=req.query.venueCode||null;if(!date||!venueCode)throw new Error('date and venueCode required');const [b,deep]=await Promise.all([base(req,date,venueCode,raceNo),deepPools(date,venueCode,raceNo)]),meeting=(b.raceMeetings||[]).find(m=>m.date===date&&m.venueCode===venueCode)||(b.raceMeetings||[])[0],race=meeting&&(meeting.races||[]).find(r=>Number(r.no)===raceNo);if(!race)throw new Error('Race not found');const byType={};for(const p of b.odds||[])byType[p.oddsType]=p;for(const p of deep.items)byType[p.oddsType]=p;
-const types=ALL.filter(t=>byType[t]),shares={};for(const t of types)shares[t]=marginal(byType[t]);const winPool=byType.WIN,winOddsMap={};for(const n of winPool?.oddsNodes||[]){const a=nums(n.combString),o=val(n.oddsValue);if(a.length===1&&o)winOddsMap[a[0]]=o}const horses={};for(const r of race.runners||[]){const no=Number(r.no);if(!no||r.status==='Standby')continue;const win=shares.WIN?.[no]||0,ps={};for(const t of types){const s=shares[t]?.[no]||0;ps[t]={share:s||null,excess:t==='WIN'?0:pctEx(s,win)}}horses[no]={no,name:r.name_ch||r.name_en||'',winOdds:winOddsMap[no]||val(r.winOdds),pools:ps};}
-const poolInvs=meeting?.poolInvs||[],meta={};let totalInvestment=0;for(const t of types){const p=byType[t],inv=poolInvs.find(x=>x.oddsType===t&&(x.leg?.races||[]).map(Number).includes(raceNo)),investment=val(inv?.investment);if(investment)totalInvestment+=investment;meta[t]={investment,lastUpdateTime:p?.lastUpdateTime||inv?.lastUpdateTime||null,nodeCount:(p?.oddsNodes||[]).length,status:p?.status||inv?.status||null}}
-const usableTypes=types.filter(t=>meta[t]?.investment>0&&meta[t]?.nodeCount>0&&Object.values(shares[t]||{}).some(x=>x>0));
-res.setHeader('Cache-Control','no-store, max-age=0');res.status(200).json({ok:true,fetchedAt:new Date().toISOString(),baseSnapshotId:Number(b.snapshotId||0),baseFetchedAt:b.fetchedAt||null,baseCacheState:b.cacheState||null,baseStaleSnapshot:!!b.staleSnapshot,resolved:{date,venueCode,raceNo},postTime:race.postTime||null,types,usableTypes,horses,pools:meta,totalInvestment,failedDeepPools:deep.failed,note:'Heuristic marginal support derived from public parimutuel odds; not ticket counts or identified bettors.'});}catch(e){res.setHeader('Cache-Control','no-store, max-age=0');res.status(502).json({ok:false,error:e?.name==='AbortError'?'HKJC request timeout':(e?.message||'late-money unavailable'),fetchedAt:new Date().toISOString()})}}
+  const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),12000);
+  try{
+    const r=await fetch(UP+'?'+q.toString(),{signal:ctl.signal,cache:'no-store',headers:{accept:'application/json',apikey:ANON,authorization:'Bearer '+ANON,'user-agent':'SmartBet-QSpec-Proxy/1.0'}});
+    const text=await r.text();let j=null;try{j=JSON.parse(text)}catch{}
+    if(!j)return res.status(502).json({ok:false,error:'qspec returned invalid JSON'});
+    if(j.baseSnapshotId)res.setHeader('X-SmartBet-Snapshot',String(j.baseSnapshotId));
+    return res.status(r.status).json(j);
+  }catch(e){
+    return res.status(502).json({ok:false,error:e?.name==='AbortError'?'qspec timeout':(e?.message||'qspec unavailable'),fetchedAt:new Date().toISOString()});
+  }finally{clearTimeout(tm)}
+}
