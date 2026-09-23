@@ -53,7 +53,9 @@ async function loadData(manual=false){
     state.race=state.races.find(r=>Number(r.no)===Number(state.raceNo))||state.races[0];
     state.odds=oddsMap(j.odds||[]); state.pools=poolMap(j.pools||[]);
     await syncCloudHistory();
-    $('updatedAt').textContent=state.snapshotId?`#${String(state.snapshotId).slice(-6)} · ${fmtTime(state.apiFetchedAt)}`:nowHK(); setLive(true,'HKJC LIVE');
+    const cacheState=String(j.cacheState||'REFRESH');
+    const liveText=cacheState==='HEALTH_FALLBACK'?'資料保護':cacheState==='STALE_FALLBACK'||cacheState==='STALE'?'沿用上一筆':'HKJC LIVE';
+    $('updatedAt').textContent=state.snapshotId?`#${String(state.snapshotId).slice(-6)} · ${fmtTime(state.apiFetchedAt)}${cacheState==='REFRESH'||cacheState==='HIT'?'':` · ${cacheState}`}`:nowHK(); setLive(cacheState!=='STALE_FALLBACK'&&cacheState!=='STALE',liveText);
     renderMeeting(); renderRaces(); recordSnapshot(); renderMoneyFlow(); renderHorseGrid(); renderBetting(); updateCountdown();
   }catch(e){ setLive(false,'資料暫停'); $('meetingTitle').textContent='暫時未能取得 HKJC 資料'; $('raceMeta').textContent=e.message; }
   finally{ if(manual)$('refreshBtn').disabled=false; }
