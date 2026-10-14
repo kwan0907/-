@@ -2,7 +2,7 @@
 'use strict';
 if(window.__SB_BASE_OVERLAY_TG__)return;
 window.__SB_BASE_OVERLAY_TG__='20261014-base1';
-var D=document,inFlight=false,lastAutoAttempt=0;
+var D=document,inFlight=false,lastAutoAttempt=0,retry=null;
 var STORE='sb-tg-auto-chart-v1',SECRET='sb-tg-send-secret';
 function $(s,root){return (root||D).querySelector(s)}
 function all(s,root){return Array.from((root||D).querySelectorAll(s))}
@@ -38,10 +38,11 @@ function style(){
 function makeTools(host){
   var tools=$('.qSbTelegramTools',host);if(tools)return tools;
   tools=D.createElement('div');tools.className='qSbTelegramTools';
-  tools.innerHTML='<button type="button" data-sbtg="send">📤 傳送圖表到 TG</button><button type="button" data-sbtg="auto">🔔 自動（開頁期間）</button><span class="qSbTelegramStatus" aria-live="polite"></span>';
+  tools.innerHTML='<button type="button" data-sbtg="send">📤 傳送圖表到 TG</button><button type="button" data-sbtg="auto">🔔 自動（開頁期間）</button><button type="button" data-sbtg="retry" hidden>↻ 重試失敗目的地</button><span class="qSbTelegramStatus" aria-live="polite"></span>';
   var meta=$('.qLiveMeta',host)||$('.qCloudLabel',host)||$('.qSpecTabs',host);
   if(meta)meta.after(tools);else host.prepend(tools);
   $('[data-sbtg="send"]',tools).onclick=function(){send(false)};
+  $('[data-sbtg="retry"]',tools).onclick=function(){retryFailed()};
   $('[data-sbtg="auto"]',tools).onclick=function(){
     var on=localStorage.getItem(STORE)==='1';
     if(!on&&!getSecret())return;
@@ -140,6 +141,41 @@ function renderPng(host,key,info){
   x.font='16px Arial';x.fillText('研究訊號，不代表勝率或保證結果。',left,730);
   return c.toDataURL('image/png');
 }
+async function deliver(secret,body) {
+  var r=await fetch('/api/telegram-send',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-smartbet-key':secret},
+    body:JSON.stringify(body)
+  });
+  var j=await r.json().catch(function(){return {ok:false,error:'Telegram API 回應格式錯誤'}});
+  if(!j||!Array.isArray(j.results))throw Error((j&&j.error)||'Telegram 服務暫時無法使用');
+  return j;
+}
+function retryButton(tools){
+  var b=$('[data-sbtg="retry"]',tools);
+  if(!b)return;
+  b.hidden=!(retry&&retry.labels&&retry.labels.length);
+  b.disabled=inFlight;
+  if(!b.hidden)b.textContent='↻ 重試失敗 '+retry.labels.length+' 個目的地';
+}
+async function retryFailed(){
+  if(inFlight||!retry||!retry.labels.length)return;
+  var key=raceKey(),host=$('#liveDashboard .qSpecHost .qSpec');
+  if(!key||!host||key!==retry.body.raceKey)return;
+  var tools=makeTools(host),secret=getSecret();
+  if(!secret)return;
+  var source=retry;
+  inFlight=true;notice(tools,'⏳ 正在重試失敗目的地…');retryButton(tools);
+  try{
+    var j=await deliver(secret,Object.assign({},source.body,{onlyLabels:source.labels}));
+    var failed=j.results.filter(function(x){return !x.ok}).map(function(x){return x.label});
+    source.labels=failed;
+    retry=failed.length?source:null;
+    if(j.sentCount>0&&source.doneKey)localStorage.setItem(source.doneKey,String(Date.now()));
+    notice(tools,'已重試傳送 '+j.sentCount+'/'+j.total+(failed.length?'，仍有 '+failed.length+' 個失敗':'，全部完成 ✅'));
+  }catch(e){notice(tools,'❌ '+String(e.message||e))}
+  finally{inFlight=false;retryButton(tools)}
+}
 async function send(isAuto,info){
   if(inFlight)return;
   var key=raceKey(),host=$('#liveDashboard .qSpecHost .qSpec');
@@ -152,25 +188,31 @@ async function send(isAuto,info){
   var png;
   try{png=renderPng(host,key,info)}catch(e){notice(tools,String(e.message||e));return}
   var doneKey='sb-tg-auto-done:'+key+':'+(info.pick&&info.pick.at);
-  inFlight=true;notice(tools,'⏳ 正在傳送圖片…');
+  var body={
+    raceKey:key,png:png,
+    caption:'🏇 SmartBet HK｜'+key.split(':')[1]+' 第'+key.split(':')[2]+'場\\n'
+      +'📊 原版資金柱圖 · 快照 '+fmt(info.frame.t)+'\\n'
+      +'🔵 雲端 T-5：'+(info.pick?info.pick.nos.map(function(n){return '#'+n}).join(' '):'未有可核實名單')
+      +'\\n原版分數未經藍色算法重算；研究用途，非勝率。'
+  };
+  inFlight=true;notice(tools,'⏳ 正在發送圖片到全部 TG 目的地…');retryButton(tools);
   try{
-    var r=await fetch('/api/telegram-send',{method:'POST',
-      headers:{'Content-Type':'application/json','x-smartbet-key':secret},
-      body:JSON.stringify({raceKey:key,png:png,
-        caption:'🏇 SmartBet HK｜'+key.split(':')[1]+' 第'+key.split(':')[2]+'場\n'
-          +'📊 原版資金柱圖 · 快照 '+fmt(info.frame.t)+'\n'
-          +'🔵 雲端 T-5：'+(info.pick?info.pick.nos.map(function(n){return '#'+n}).join(' '):'未有可核實名單')
-          +'\n原版分數未經藍色算法重算；研究用途，非勝率。'})});
-    var j=await r.json();
-    if(!r.ok||!j.ok)throw Error(j.error||'發送失敗');
-    if(isAuto)localStorage.setItem(doneKey,String(Date.now()));
-    notice(tools,'✅ 已傳送 TG'+(isAuto?'（T-5 自動）':''));
+    var j=await deliver(secret,body);
+    var failed=j.results.filter(function(x){return !x.ok}).map(function(x){return x.label});
+    retry=failed.length?{body:body,labels:failed,doneKey:isAuto?doneKey:null}:null;
+    if(isAuto&&j.sentCount>0)localStorage.setItem(doneKey,String(Date.now()));
+    if(j.sentCount>0){
+      notice(tools,'✅ 已發送 '+j.sentCount+'/'+j.total+(failed.length?'，'+failed.length+' 個失敗，請按重試':'，全部成功')+(isAuto?'（T-5 自動）':''));
+    }else{
+      notice(tools,'❌ 全部 '+j.total+' 個目的地發送失敗，請檢查 Bot 權限');
+    }
   }catch(e){notice(tools,'❌ '+String(e.message||e))}
-  finally{inFlight=false}
+  finally{inFlight=false;retryButton(tools)}
 }
 function update(){
   var key=raceKey(),host=$('#liveDashboard .qSpecHost .qSpec');
   if(!key||!host)return;
+  if(retry&&retry.body.raceKey!==key)retry=null;
   var tab=$('.qSpecTabs button.on',host),liveMode=tab&&tab.dataset.mode==='live';
   if(!liveMode)return;
   style();
@@ -180,6 +222,7 @@ function update(){
   toggle.classList.toggle('autoOn',auto);
   toggle.textContent=auto?'🔔 自動（開頁期間）：ON':'🔕 自動：OFF';
   button.disabled=!info.live||inFlight;
+  retryButton(tools);
   // Auto-send once per race at the T-5 cloud lock, only for current/very recent data.
   // This never starts a hidden background job and never sends a historical replay.
   var stamp=info.pick&&info.pick.at,elapsed=stamp&&Date.now()-stamp;
