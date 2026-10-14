@@ -190,10 +190,10 @@ async function send(isAuto,info){
   var doneKey='sb-tg-auto-done:'+key+':'+(info.pick&&info.pick.at);
   var body={
     raceKey:key,png:png,
-    caption:'🏇 SmartBet HK｜'+key.split(':')[1]+' 第'+key.split(':')[2]+'場\\n'
-      +'📊 原版資金柱圖 · 快照 '+fmt(info.frame.t)+'\\n'
+    caption:'🏇 SmartBet HK｜'+key.split(':')[1]+' 第'+key.split(':')[2]+'場\n'
+      +'📊 原版資金柱圖 · 快照 '+fmt(info.frame.t)+'\n'
       +'🔵 雲端 T-5：'+(info.pick?info.pick.nos.map(function(n){return '#'+n}).join(' '):'未有可核實名單')
-      +'\\n原版分數未經藍色算法重算；研究用途，非勝率。'
+      +'\n原版分數未經藍色算法重算；研究用途，非勝率。'
   };
   inFlight=true;notice(tools,'⏳ 正在發送圖片到全部 TG 目的地…');retryButton(tools);
   try{
