@@ -12,9 +12,33 @@
 由 /api/telegram-send serverless function 發相；Bot Token、Chat ID 只存 server-side 環境變數，不寫入 HTML / JS。
 
 ### Vercel → smartbet-moneyflow-v1 → Settings → Environment Variables
-TELEGRAM_BOT_TOKEN = 從 BotFather 得到的 token
-TELEGRAM_CHAT_ID = 你的私人 chat_id / 群組 ID (-100...) / 頻道 @username
+TELEGRAM_BOT_TOKEN = 從 BotFather 得到的 Bot token
 TELEGRAM_SEND_KEY = 你自行建立長而隨機的發圖密鑰（建議 32+ 字元）
+TELEGRAM_CHAT_IDS = 包含 1–10 個收件對象的 JSON 陣列（可混合私人私訊、群組及頻道）
+
+TELEGRAM_CHAT_IDS 的值例如：
+```json
+[
+  {"id":"123456789","label":"私人通知"},
+  {"id":"-1001234567890","label":"跑馬討論群"},
+  {"id":"@example_racing_channel","label":"公開頻道"},
+  {"id":"-1009876543210","label":"備用群組","enabled":false}
+]
+```
+以上號碼與頻道名稱純粹示例，不會自動加入 Telegram。
+- 同一個 Bot 可發送到以上全部已啟用目的地；只從服務端設定讀取清單，訪客不能任意填寫收件 ID。
+- `id` 必須為 Telegram chat_id，或公開頻道 / 群組的 `@username`；`label` 必須獨一無二。
+- Bot 必須已與私人用戶開始對話、已加入群組，且在頻道具備發文管理權限。
+- 更改目的地清單後需要重新部署。
+- **向後相容**：若未設定 TELEGRAM_CHAT_IDS，原有 TELEGRAM_CHAT_ID 仍可作單一目的地使用。若兩者都有設定，優先採用多目的地陣列。
+
+## 多目的地傳送行為
+- 每次按「傳送圖表到 TG」時，系統會向全部啟用目的地逐一發同一張 PNG 與註解。
+- 顯示成功/總數（例如 2/3）；發送失敗不會阻止其他目的地繼續。
+- 有部份失敗時出現「重試失敗目的地」按鈕，保留同一份圖像和同一快照，只向失敗的標籤重發，避免重覆打擾成功的聊天室。
+- T-5 自動模式：只在網頁打開時工作。同一裝置當至少 1 個目的地成功時即標記該場已送過；失敗目的地需手動按重試（避免已成功收件的目的地因自動重試而收到重覆圖片）。
+- 若全部失敗，維持 60 秒節流後可於同一短暫 T-5 時窗內再次嘗試。
+- 多裝置 / 多分頁之間暫未有伺服器集中去重；要做到真正跨裝置一次、離線自動應於雲端後台以 DB 記錄每場每聊天室的 delivery key。
 
 設定後重新部署此版本，開 Q膽 → 即場，按「📤 傳送圖表到 TG」，第一次會提示輸入 TELEGRAM_SEND_KEY。
 密鑰只存當次分頁 sessionStorage；Bot Token 不會送到瀏覽器。
