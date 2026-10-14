@@ -2,7 +2,7 @@
 'use strict';
 if(window.__SB_BASE_OVERLAY_TG__)return;
 window.__SB_BASE_OVERLAY_TG__='20261014-base1';
-var D=document,lastKey='',inFlight=false,view=null,intervalId=0,knownPick=null;
+var D=document,inFlight=false,lastAutoAttempt=0;
 var STORE='sb-tg-auto-chart-v1',SECRET='sb-tg-send-secret';
 function $(s,root){return (root||D).querySelector(s)}
 function all(s,root){return Array.from((root||D).querySelectorAll(s))}
@@ -75,7 +75,7 @@ function syncOverlay(host,key){
   fallbackGuard(host,!!(live&&sel.frame));
   var old=$('.qSbBlueSummary',host);
   if(!live||!sel.frame||!Number.isFinite(at)){
-    knownPick=null;host.classList.remove('qSbUnifiedActive');
+    host.classList.remove('qSbUnifiedActive');
     if(old)old.remove();
     return {live:false,key:key,frame:null,pick:null};
   }
@@ -94,7 +94,6 @@ function syncOverlay(host,key){
     if(!old){old=D.createElement('div');old.className='qSbBlueSummary';var meta=$('.qLiveMeta',host);if(meta)meta.after(old);else host.prepend(old)}
     if(old.textContent!==txt)old.textContent=txt;
   }else if(old)old.remove();
-  knownPick=same?pick:null;
   return {live:true,key:key,frame:sel.frame,pick:same?pick:null,latest:sel.index===sel.frames.length-1};
 }
 // Draw the *displayed* base values/runner order. Never calculate or overwrite a bar score.
@@ -188,8 +187,10 @@ function update(){
   var fresh=info.live&&info.latest&&info.frame&&Number(info.frame.mtp)<=5.75
     &&Number(info.frame.mtp)>=-0.5&&old>=-60000&&old<90000&&elapsed>=0&&elapsed<360000;
   var mark=stamp&&'sb-tg-auto-done:'+key+':'+stamp;
-  if(auto&&fresh&&stamp&&!localStorage.getItem(mark)&&!inFlight)send(true,info);
+  if(auto&&fresh&&stamp&&!localStorage.getItem(mark)&&!inFlight&&sessionStorage.getItem(SECRET)&&Date.now()-lastAutoAttempt>60000){
+    lastAutoAttempt=Date.now();send(true,info);
+  }
 }
-intervalId=setInterval(update,1600);
+setInterval(update,1600);
 update();
 })();
